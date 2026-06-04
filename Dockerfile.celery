@@ -1,0 +1,27 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# ===== بخش اضافه شده برای رفع مشکل اینترنت =====
+RUN pip config set global.index-url https://mirror-pypi.runflare.com/simple/ && \
+    pip config set global.trusted-host mirror-pypi.runflare.com
+# ============================================
+
+# ===== نصب ffmpeg (برای پردازش ویدیو) =====
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# ============================================
+
+# نصب وابستگی‌های مورد نیاز
+RUN pip install celery redis motor pymongo boto3 python-dotenv pillow opencv-python-headless
+
+# کپی کردن همه فایل‌های مورد نیاز
+COPY celery_app.py .
+COPY tasks.py .
+COPY database.py .
+COPY image_processor.py .
+COPY minio_client.py .
+COPY crud.py .
+COPY .env .
+
+# دستور اجرای Celery Worker
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--pool=solo"]

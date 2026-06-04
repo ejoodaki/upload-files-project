@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>آپلود فایل برای دستگاه/قطعه</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+            direction: rtl;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        select, input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+            display: none;
+        }
+        .info {
+            background: #d1ecf1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        h3 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📤 سامانه آپلود فایل</h2>
+        
+        <div class="info" id="rulesInfo">
+            لطفاً ابتدا یک دستگاه یا قطعه انتخاب کنید
+        </div>
+        
+        <label>نوع:</label>
+        <select id="category">
+            <option value="">انتخاب کنید...</option>
+            <option value="device">دستگاه (Device)</option>
+            <option value="component">قطعه (Component)</option>
+        </select>
+        
+        <label>آیتم:</label>
+        <select id="itemId">
+            <option value="">ابتدا نوع را انتخاب کنید</option>
+        </select>
+        
+        <div id="rulesContainer"></div>
+        
+        <label>انتخاب فایل:</label>
+        <input type="file" id="fileInput">
+        
+        <button onclick="uploadFile()">آپلود فایل</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        
+        // وقتی نوع تغییر می‌کنه، لیست آیتم‌ها رو بگیر
+        document.getElementById('category').addEventListener('change', async function() {
+            const category = this.value;
+            const itemSelect = document.getElementById('itemId');
+            const rulesInfo = document.getElementById('rulesInfo');
+            
+            if (!category) {
+                itemSelect.innerHTML = '<option value="">ابتدا نوع را انتخاب کنید</option>';
+                rulesInfo.innerHTML = 'لطفاً ابتدا یک دستگاه یا قطعه انتخاب کنید';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/${category}s`);
+                const data = await response.json();
+                
+                if (data[`${category}s`] && data[`${category}s`].length > 0) {
+                    itemSelect.innerHTML = '<option value="">انتخاب کنید...</option>';
+                    data[`${category}s`].forEach(item => {
+                        itemSelect.innerHTML += `<option value="${item._id}">${item.name} (${item.brand || item.type})</option>`;
+                    });
+                    rulesInfo.innerHTML = `✅ ${data[`${category}s`].length} آیتم پیدا شد. لطفاً یکی رو انتخاب کنید.`;
+                } else {
+                    itemSelect.innerHTML = '<option value="">آیتمی پیدا نشد</option>';
+                    rulesInfo.innerHTML = '⚠️ هیچ آیتمی در دیتابیس وجود ندارد. ابتدا دیتای نمونه را وارد کنید.';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                rulesInfo.innerHTML = '❌ خطا در ارتباط با سرور. مطمئن شوید سرور در حال اجراست.';
+            }
+        });
+        
+        // وقتی آیتم انتخاب شد، قوانین رو بگیر
+        document.getElementById('itemId').addEventListener('change', async function() {
+            const category = document.getElementById('category').value;
+            const itemId = this.value;
+            
+            if (!category || !itemId) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/get-rules/${category}/${itemId}`);
+                const rules = await response.json();
+                
+                const rulesContainer = document.getElementById('rulesContainer');
+                rulesContainer.innerHTML = `
+                    <div style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <h3>📋 قوانین آپلود برای ${rules.item_name}:</h3>
+                        <p>✅ فرمت‌های مجاز: ${rules.allowed_formats.join(', ')}</p>
+                        <p>📦 حداکثر حجم: ${rules.max_size_mb} مگابایت</p>
+                        <p>💡 ${rules.message}</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+        
+        async function uploadFile() {
+            const category = document.getElementById('category').value;
+            const itemId = document.getElementById('itemId').value;
+            const fileInput = document.getElementById('fileInput');
+            const resultDiv = document.getElementById('result');
+            
+            if (!category || !itemId) {
+                resultDiv.style.display = 'block';
+                resultDiv.style.background = '#f8d7da';
+                resultDiv.innerHTML = '❌ لطفاً نوع و آیتم را انتخاب کنید';
+                return;
+            }
+            
+            if (!fileInput.files[0]) {
+                resultDiv.style.display = 'block';
+                resultDiv.style.background = '#f8d7da';
+                resultDiv.innerHTML = '❌ لطفاً یک فایل انتخاب کنید';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            resultDiv.style.display = 'block';
+            resultDiv.style.background = '#e9ecef';
+            resultDiv.innerHTML = '⏳ در حال آپلود...';
+            
+            try {
+                const response = await fetch(`${API_URL}/upload/${category}/${itemId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.style.background = '#d4edda';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>آپلود موفق!</strong><br>
+                        📄 نام فایل: ${result.file_info.name}<br>
+                        📦 حجم: ${result.file_info.size_mb} مگابایت<br>
+                        🆔 شناسه: ${result.upload_id}
+                    `;
+                } else {
+                    resultDiv.style.background = '#f8d7da';
+                    resultDiv.innerHTML = `❌ خطا: ${result.detail || 'مشخص نیست'}`;
+                }
+            } catch (error) {
+                resultDiv.style.background = '#f8d7da';
+                resultDiv.innerHTML = `❌ خطا در ارتباط با سرور: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
